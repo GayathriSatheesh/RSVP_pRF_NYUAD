@@ -20,7 +20,7 @@ NINE_POINTS
 -1,-1,-1
 ---------#
 # tr = TR length. Format: float
-0.75
+1.3
 ---------#
 # tr_per_bar = Number of TRs per bar location. Format: int
 2
