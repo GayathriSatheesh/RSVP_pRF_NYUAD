@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+## MAKE SURE U CAHNGE THE MRI TRIGGER AND KEYBOARD AND CHECK THE BUTTON BOX CODE
 #
 # rsvp_sweep.py
 #
