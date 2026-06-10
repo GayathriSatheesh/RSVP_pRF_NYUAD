@@ -1,8 +1,8 @@
 # eyetracker_ip = IP address to which eyetracker will be configured. If not applicable, leave blank. Value is commonly 100.1.1.1 Format: string
-192.168.1.5
+169.254.139.27
 ---------#
 # calib_type = How many dots used in eyetracker calibration. Options: THREE_POINTS, FIVE_POINTS, NINE_POINTS, or THIRTEEN_POINTS. Format: string
-FIVE_POINTS
+NINE_POINTS
 ---------#
 # response_key = The number that will be used as the subject's response in the MRI setup. Value can be number or letter. Format: string
 1
@@ -20,7 +20,7 @@ FIVE_POINTS
 -1,-1,-1
 ---------#
 # tr = TR length. Format: float
-1.3
+0.75
 ---------#
 # tr_per_bar = Number of TRs per bar location. Format: int
 2

@@ -21,7 +21,7 @@
 # Jeff Kravitz
 # Curtis Lab
 # New York University
-# modified by zhengang lu 11/2023
+# modified by zl
 # 1. The masks have a length of the image size so don't cut the image into half
 #   e.g.,bore_mask_TL = visual.Rect(win=win, fillColor = color, lineColor = color, size = image_h * 1)
 # 2. gui.dlg changed to screen=1 so the sub info shown on the secondary screen
@@ -87,7 +87,7 @@ targ_rate = params['targ_rate']
 response_key = params['response_key']
 bore_mask = params['bore_mask']
 
-fps = 60                                        # Frame rate of display computer. Should be set to 60
+fps = 120                                        # Frame rate of display computer. Should be set to 60
 # Check that specified parameters make sense
 if params['response_period'] > params['targ_cooldown']:
     raise Exception('Error: response_period must not be greater than targ_cooldown. Please check rsvp_params.txt and try again.')
@@ -303,6 +303,7 @@ def gen_set(targ, last_set):
 # 8. Define sweep function ====================================================================================================================<
 def sweep(tStartExp, bar_dur, direct, refresh_rate, trial, targ=targ, targ_rate=targ_rate, sweep_rate=sweep_rate,
           a1=a1, a2=a2, a3=a3, a4=a4, a5=a5, a6=a6, b1=b1, b2=b2, b3=b3, b4=b4, b5=b5, b6=b6):
+    sweep_rate = np.round(sweep_rate)
     # Initialize target cooldown timer; Start static period to load sweep
     if eye_tracking:
         et.sendMessage('xDAT 1')
