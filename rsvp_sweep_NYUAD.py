@@ -193,6 +193,16 @@ if params['save_log']:
     stim_log.write('trial,barOnset,imageOnset,direct,i1img,i1x,i1y,i2img,i2x,i2y,i3img,i3x,i3y,i4img,i4x,i4y,i5img,i5x,i5y,i6img,i6x,i6y,t,targ_here,targ_img,targ_slot,RT\n')
 
 
+_btn_was_down = False
+def getButtonPresses(bit=18):
+    """Non-blocking, dependency-free. ['red button'] on a NEW press, else []. One USB read."""
+    global _btn_was_down
+    DPxUpdateRegCache()
+    down = decimal_to_binary(DPxGetDinValue())[bit] == '1'
+    new_press = down and not _btn_was_down                      # rising edge = consume once
+    _btn_was_down = down
+    return ['red button'] if new_press else []
+
 def waitForButtonPress(maxWait=None, bit=18, clear=True, checkInterval=0.002):
     """Blocks until the red RESPONSEPixx button is pressed, or maxWait elapses.
     Returns ['red button'] on a press, or [] on timeout."""
@@ -234,15 +244,15 @@ def waitForButtonPress(maxWait=None, bit=18, clear=True, checkInterval=0.002):
 
 
 # defining function to check button press - particularly the right index
-def getButtonPress():
-        print('Listening to button press')
-
-        DPxUpdateRegCache()
-        bits = decimal_to_binary(DPxGetDinValue())
-        if bits[18] == '1':  # right box red, listen_to = 1
-            return ['red button']
-        else:
-            return None
+# def getButtonPress():
+#         print('Listening to button press')
+#
+#         DPxUpdateRegCache()
+#         bits = decimal_to_binary(DPxGetDinValue())
+#         if bits[18] == '1':  # right box red, listen_to = 1
+#             return ['red button']
+#         else:
+#             return None
 # 4. Automatically configure remaining parameters
   # Key used to respond to target stimuli
 
@@ -491,7 +501,7 @@ def sweep(tStartExp, bar_dur, direct, refresh_rate, trial, targ=targ, targ_rate=
     static.complete()
     if buttonBox:
         print('Listening to button press once')
-        keypress = waitForButtonPress()
+        keypress = getButtonPresses()
         if 'red button' in keypress:
             print('red button')
         elif keypress == None:
@@ -535,7 +545,7 @@ def sweep(tStartExp, bar_dur, direct, refresh_rate, trial, targ=targ, targ_rate=
             if response_key in keypress:
                 if buttonBox:
                     print('Listening to button press once')
-                    keypress = waitForButtonPress()
+                    keypress = getButtonPresses()
                 else:
                     if mac:keypress = iokeyboard.getPresses(keys=[response_key])
                     else:keypress = event.getKeys(keyList=[response_key])
@@ -556,7 +566,7 @@ def sweep(tStartExp, bar_dur, direct, refresh_rate, trial, targ=targ, targ_rate=
                 next_set_idx += 1
                 loop_count += 1
                 if buttonBox:
-                    keypress = waitForButtonPress()
+                    keypress = getButtonPresses()
                 else:
                     if mac:keypress = iokeyboard.getPresses(keys=[response_key])
                     else:keypress = event.getKeys(keyList=[response_key])
@@ -617,7 +627,7 @@ def sweep(tStartExp, bar_dur, direct, refresh_rate, trial, targ=targ, targ_rate=
 
             # Check key response
             if buttonBox:
-                keypress = waitForButtonPress()
+                keypress = getButtonPresses()
             else:
                 if mac:keypress = iokeyboard.getPresses(keys=[response_key])
                 else:keypress = event.getKeys(keyList=[response_key])
