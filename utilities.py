@@ -172,7 +172,7 @@ def getbuttonColor(selection=None, blocking=True):
     Example:
         ("right box", "green")
     """
-    listen_pairs = _normalize_selection(selection)
+    listen_pairs =  (selection)
 
     while True:
         button_box = _read_button_bits()

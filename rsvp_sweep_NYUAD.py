@@ -40,7 +40,7 @@
 from __future__ import division, print_function
 from psychopy import logging, core, visual, gui, event
 from psychopy.core import StaticPeriod, CountdownTimer
-from psychopy.iohub import launchHubServer
+from psychopy.iohub.client.connect import launchHubServer
 from psychopy.info import RunTimeInfo
 from datetime import datetime
 from inspect import getsourcefile
@@ -57,14 +57,9 @@ import psy_utility as psyut
 import time
 
 from pypixxlib.propixx import PROPixxCTRL
-
-triggerkey='q' # to quit when waiting for trigger, then on its esc
-skiptrig='s'
-datapixx=False #set to 1 to test in scanner
-scanner=False #set to 1 to test in scanner with trigger
-samekey=20 # red button
-diffkey=18 # green button
-
+from utilities import decimal_to_binary
+from utilities import getbuttonColor
+from pypixxlib._libdpx import DPxUpdateRegCache, DPxGetDinValue, DPxOpen, DPxClose
 
 
 # 1. Load experiment parameters from rsvp_params.txt
@@ -99,6 +94,14 @@ targ_rate = params['targ_rate']
 response_key = params['response_key']
 bore_mask = params['bore_mask']
 
+
+# #No need for this on nyu code: triggerkey= params['pulse_cue'];# this will be 5 # to quit when waiting for trigger, then on its esc
+# skiptrig = params['pulse_cue']; # get trigger from the keyboard which will be 5
+# datapixx=False #set to 1 to test in scanner
+# scanner=False #set to 1 to test in scanner with trigger
+# samekey=20 # red button
+# diffkey=18 # green button
+
 fps = 120                                        # Frame rate of display computer. Should be set to 60
 # Check that specified parameters make sense
 if params['response_period'] > params['targ_cooldown']:
@@ -115,6 +118,8 @@ subinfo.addField('Eyetracker', False)
 subinfo.addField('MRI', False)
 subinfo.addField('Fullscreen', False)
 subinfo.addField('Use Second Monitor', False)
+subinfo.addField('Use Button Box', False)
+subinfo.addField('Debug mode', False) # basically a debug mode where the trigger can come from the keyboard using 5
 sub_data = subinfo.show()
 if subinfo.OK:
     print('\n\n')
@@ -126,6 +131,7 @@ if subinfo.OK:
     print('Response Period:  ' + str(math.trunc(params['response_period'] * 1000)) + ' ms')
     print('Eyetracking:      ' + str(sub_data[3]))
     print('MRI:              ' + str(sub_data[4]))
+    print('Button box:       ' + str(sub_data[7]))
     print('\n')
 else:
     raise Exception('Error: User cancelled')
@@ -140,7 +146,11 @@ if sub_data[6]:
     which_screen = 1
 else:
     which_screen = 0
-
+buttonBox = sub_data[7]
+debug=sub_data[8]
+if buttonBox:
+    DPxOpen()
+    print('Connection to Vpixx open')
 # Configure system
 run_info = {'fullscreen': fullscreen,
             'which_screen': which_screen,
@@ -182,14 +192,69 @@ if params['save_log']:
     stim_log = open(filename + '_stimlog.csv', 'w')
     stim_log.write('trial,barOnset,imageOnset,direct,i1img,i1x,i1y,i2img,i2x,i2y,i3img,i3x,i3y,i4img,i4x,i4y,i5img,i5x,i5y,i6img,i6x,i6y,t,targ_here,targ_img,targ_slot,RT\n')
 
+
+def waitForButtonPress(maxWait=None, bit=18, clear=True, checkInterval=0.002):
+    """Blocks until the red RESPONSEPixx button is pressed, or maxWait elapses.
+    Returns ['red button'] on a press, or [] on timeout."""
+    start_time = time.time()
+    if maxWait is None:
+        maxWait = 60000.0
+    timeout = start_time + maxWait
+    key = []
+    was_down = [False]
+
+    def checkButton():
+        DPxUpdateRegCache()                                    # VPixx equivalent of getKeys()
+        down = decimal_to_binary(DPxGetDinValue())[bit] == '1'
+        new_press = down and not was_down[0]                   # rising edge = a fresh press
+        was_down[0] = down
+        if event.getKeys(keyList=['escape']):                  # pump window + allow quit
+            win.close(); core.quit()
+        return ['red button'] if new_press else []
+
+    if clear:                                                  # ignore a button already held at entry
+        DPxUpdateRegCache()
+        was_down[0] = decimal_to_binary(DPxGetDinValue())[bit] == '1'
+
+    if maxWait <= 0:
+        return checkButton()
+
+    while time.time() < (timeout - checkInterval * 2):
+        ltime = time.time()
+        key = checkButton()
+        if key:
+            return key
+        time.sleep(max(checkInterval - (time.time() - ltime), 0.0001))
+
+    while time.time() < timeout:
+        key = checkButton()
+        if key:
+            return key
+    return key
+
+
+# defining function to check button press - particularly the right index
+def getButtonPress():
+        print('Listening to button press')
+
+        DPxUpdateRegCache()
+        bits = decimal_to_binary(DPxGetDinValue())
+        if bits[18] == '1':  # right box red, listen_to = 1
+            return ['red button']
+        else:
+            return None
 # 4. Automatically configure remaining parameters
-if scanning:
-    resp_key_text = params['response_key']            # Key used to respond to target stimuli
+  # Key used to respond to target stimuli
+
+if buttonBox: # take index button box
+    response_key='red button'
+    resp_key_text = 'red button'
 else:
     if mac: response_key = ' '
     else: response_key = 'space'
     resp_key_text = 'space'
-    bore_mask = False
+    #bore_mask = False
+# ------------------------------------------------
 bar_dur = params['tr_per_bar'] * params['tr']   # Duration of each bar step, in seconds
 sweep_rate = bar_dur * fps                      # Rate at which bar moves, in frames
 frames_per_set = []
@@ -424,8 +489,16 @@ def sweep(tStartExp, bar_dur, direct, refresh_rate, trial, targ=targ, targ_rate=
 
     # End static period to load stimuli
     static.complete()
-    if mac: keypress = iokeyboard.getPresses(keys = [response_key])
-    else: keypress = event.getKeys(keyList = [response_key])
+    if buttonBox:
+        print('Listening to button press once')
+        keypress = waitForButtonPress()
+        if 'red button' in keypress:
+            print('red button')
+        elif keypress == None:
+            print('No button press')
+    else:
+        if mac: keypress = iokeyboard.getPresses(keys = [response_key])
+        else: keypress = event.getKeys(keyList = [response_key])
     start_rt = core.MonotonicClock()
     if eye_tracking:
         et.sendMessage('xDAT 2')
@@ -460,8 +533,12 @@ def sweep(tStartExp, bar_dur, direct, refresh_rate, trial, targ=targ, targ_rate=
             # Check key resonses for accuracy; Give feedback
             if response_timer.getTime() <= 0: targ_here = False
             if response_key in keypress:
-                if mac: keypress = iokeyboard.getPresses(keys = [response_key])
-                else: keypress = event.getKeys(keyList = [response_key])
+                if buttonBox:
+                    print('Listening to button press once')
+                    keypress = waitForButtonPress()
+                else:
+                    if mac:keypress = iokeyboard.getPresses(keys=[response_key])
+                    else:keypress = event.getKeys(keyList=[response_key])
                 if targ_here == True and response_timer.getTime() < real_resp_time and response_timer.getTime() > 0:               # Check for hits
                     this_rt.append(start_rt.getTime())
                     rt.append(this_rt[-1])
@@ -478,8 +555,11 @@ def sweep(tStartExp, bar_dur, direct, refresh_rate, trial, targ=targ, targ_rate=
                     print('Dropping frames?')
                 next_set_idx += 1
                 loop_count += 1
-                if mac: keypress = iokeyboard.getPresses(keys = [response_key])
-                else: keypress = event.getKeys(keyList = [response_key])
+                if buttonBox:
+                    keypress = waitForButtonPress()
+                else:
+                    if mac:keypress = iokeyboard.getPresses(keys=[response_key])
+                    else:keypress = event.getKeys(keyList=[response_key])
                 if show_buffer:
                     a_set = gen_set(targ=targ, last_set=b_set)                                                                      # Randomly generate new set of distractor images
                     if set_timings[next_set_idx] - set_timings[last_targ_idx] > targ_cooldown:                                      # Prevent next set from showing target if target cooldown has not reset after showing target in previous sets
@@ -536,8 +616,11 @@ def sweep(tStartExp, bar_dur, direct, refresh_rate, trial, targ=targ, targ_rate=
                 next_frame_ref = math.pi
 
             # Check key response
-            if mac: keypress = iokeyboard.getPresses(keys = [response_key])
-            else: keypress = event.getKeys(keyList = [response_key])
+            if buttonBox:
+                keypress = waitForButtonPress()
+            else:
+                if mac:keypress = iokeyboard.getPresses(keys=[response_key])
+                else:keypress = event.getKeys(keyList=[response_key])
 
             # Check key response for escape to quit experiment
             if mac: quit_key = iokeyboard.getPresses(keys = ['escape'])
@@ -666,7 +749,7 @@ if mac: iokeyboard = io.devices.keyboard
 
 
 inst_text = visual.TextStim(win = win, color = text_color, height = image_h / 4, wrapWidth = params['stim_bounds'][0])
-# 10. Target presentation & peripheral calibration
+# 10. Target presentation & peripheral calibration #ADD BUTTON BOX
 if params['calibrate_targ']:
     calib_x = [l_marg, 0, r_marg, 0]
     calib_y = [0, t_marg, 0, b_marg]
@@ -675,12 +758,20 @@ if params['calibrate_targ']:
     inst_text.draw()
     targ_image.image = image_fns[targ]
     win.flip()
-    if mac: iokeyboard.waitForPresses(keys = [response_key])
-    else: event.waitKeys(keyList = [response_key])
+    if buttonBox:
+        keypress = waitForButtonPress()
+    else:
+        if mac: iokeyboard.waitForPresses(keys = [response_key])
+        else: event.waitKeys(keyList = [response_key])
     targ_image.draw()
     win.flip()
-    if mac: iokeyboard.waitForPresses(keys = [response_key])
-    else: event.waitKeys(keyList = [response_key])
+    if buttonBox:
+        keypress = waitForButtonPress()
+    else:
+        if mac:
+            iokeyboard.waitForPresses(keys=[response_key])
+        else:
+            event.waitKeys(keyList=[response_key])
     for c in list(range(0, 4)):
         targ_image.pos = (calib_x[c], calib_y[c])
         targ_image.draw()
@@ -688,12 +779,18 @@ if params['calibrate_targ']:
         fix_cross.draw()
         fix_dot.draw()
         win.flip()
-        if mac: iokeyboard.waitForPresses(keys = [response_key])
-        else: event.waitKeys(keyList = [response_key])
+        if buttonBox:
+            keypress = waitForButtonPress()
+        else:
+            if mac:
+                iokeyboard.waitForPresses(keys=[response_key])
+            else:
+                event.waitKeys(keyList=[response_key])
     win.flip()
 
 
 # 11. Instructions
+# scanning here only indicates if trigger comes from keyboard or the scanner
 if not scanning:
     inst_text.text = 'For each trial, you will be presented with a target. You should maintain fixation on the cross in the center of the screen. If you see the target image, press the spacebar. Press the spacebar to begin.'
     inst_text.draw()
@@ -703,103 +800,48 @@ if not scanning:
     tStartExp = time.time()
     win.flip()
 
-###########Start experiment################################
-
-Trigtext = visual.TextStim(win=win, name='text',
-    text='waiting for trigger',
-    font='Arial',
-    pos=(0, 0), height=0.1, wrapWidth=None, ori=0,
-    color='white', colorSpace='rgb', opacity=1,
-    languageStyle='LTR',
-    depth=0.0);
-
-conRoutine = True
-while conRoutine:
-     Trigtext.setAutoDraw(True)
-     win.flip()
-     key=kb.getKeys()
-     for thiskey in key:
-         if thiskey==triggerkey:
-            print('keyboard trigger using:', triggerkey)
-            conRoutine = False
-            core.quit()
-     if  scanner ==False:
-         for thiskey in key:
-            if thiskey==skiptrig:
-                print('keyboard trigger using:', skiptrig)
-                Trigtext.setAutoDraw(False)
-                conRoutine = False
-     else:
-         old_state = din_state
-         trig_old=bin(old_state)[15]
-         my_device.updateRegisterCache()
-         din_state = my_device.din.getValue()
-         trig=bin(din_state)[15]
-         if (trig_old) is not (trig):
-             print('triggered!')
-             conRoutine = False
-             Trigtext.setAutoDraw(False)
-         else:
-             print('waiting for trigger')
 # 12. Run sweeps
-if scanning:
+if scanning : # trigger from scanner and take input from button box
     inst_text.text = 'Get ready!'
     inst_text.draw()
 
-    if params['extended_start']:
-        win.flip()
-        if mac: iokeyboard.waitForPresses(keys = [' '])
-        else: event.waitKeys(keyList = ['space'])
-        fix_circle.draw()
-        fix_cross.draw()
-        fix_dot.draw()
-        win.flip()
-        tStartExp = time.time()
-        if mac: iokeyboard.waitForPresses(keys = [pulse_cue])
-        else: event.waitKeys(keyList = [pulse_cue])
-        static = StaticPeriod(screenHz = fps)
-        static.start(9.5)
-        static.complete()
-        if mac: iokeyboard.waitForPresses(keys = [pulse_cue])
-        else: event.waitKeys(keyList = [pulse_cue])
-    else:
+    if debug: # believe its to add dummy TRs
         print('Subject is ready.')
-        if datapixx == True:
-            my_device = PROPixxCTRL()
+        if mac:
+            iokeyboard.waitForPresses(keys=[pulse_cue])
+        else:
+            event.waitKeys(keyList=[pulse_cue])
+        win.flip()  # see 'Get Ready' experiment starts!
+        # et.sendMessage('xDAT 100')
+        tStartExp = time.time()
+        static = StaticPeriod(screenHz=fps)
+        static.start(tr)
+        static.complete()
+    else: # we have dummy TRs from scanner
+        # Get values from datapixx
+        my_device = PROPixxCTRL()
+        din_state = my_device.din.getValue()
+        trig = bin(din_state)[15]
+        print('Subject is ready.')
+
+        ## TRIGGER FROM MRI
+        conRoutine = True
+        while conRoutine:
+            inst_text.text = 'Waiting for trigger!'
+            inst_text.draw()
+            win.flip()
+
+            old_state = din_state
+            trig_old = bin(old_state)[15]
+            my_device.updateRegisterCache()
             din_state = my_device.din.getValue()
             trig = bin(din_state)[15]
-
-            conRoutine = True
-            while conRoutine:
-                Trigtext.setAutoDraw(True)
-                win.flip()
-                if mac: iokeyboard.waitForPresses(keys='q')
-                key = kb.getKeys() # CAHNGE THIS SO IT TAKE INPUT FROM KEYBOARD LIEK THE RET OF THE CODE DOES
-                for thiskey in key:
-                    if thiskey == triggerkey:
-                        print('keyboard trigger using:', triggerkey)
-                        conRoutine = False
-                        core.quit()
-                if scanner == False:
-                    for thiskey in key:
-                        if thiskey == skiptrig:
-                            tStartExp = time.time() # GETTING START TIME
-                            print('keyboard trigger using:', skiptrig)
-                            Trigtext.setAutoDraw(False)
-                            conRoutine = False
-                else:
-                    old_state = din_state
-                    trig_old = bin(old_state)[15]
-                    my_device.updateRegisterCache()
-                    din_state = my_device.din.getValue()
-                    trig = bin(din_state)[15]
-                    if (trig_old) is not (trig):
-                        tStartExp = time.time()
-                        print('triggered!')
-                        conRoutine = False
-                        Trigtext.setAutoDraw(False)
-                    else:
-                        print('waiting for trigger')
+            if (trig_old) is not (trig):
+                tStartExp = time.time() ## GS: TIME STAMP PUT HERE - CHECK WHETHER PUTTING IT HERE VS OUTSIDE LIKE NY MAKES A DIFFERENCE
+                print('triggered!')
+                conRoutine = False
+            else:
+                print('waiting for trigger')
         win.flip() # see 'Get Ready' experiment starts!
         # et.sendMessage('xDAT 100')
         static = StaticPeriod(screenHz = fps)
@@ -859,6 +901,13 @@ if eye_tracking:
 
 
 print('Run ' + str(run_number) + ' (' + str(expt_dur) + ' s)' + ' completed! \n')
+
+if buttonBox:
+    DPxClose()
+    print('Connection to Vpixx closed')
+
 # print(expt_end-expt_start) = 1.3
 win.close()
 core.quit()
+
+

@@ -1,5 +1,5 @@
 # eyetracker_ip = IP address to which eyetracker will be configured. If not applicable, leave blank. Value is commonly 100.1.1.1 Format: string
-169.254.139.27
+100.1.1.1
 ---------#
 # calib_type = How many dots used in eyetracker calibration. Options: THREE_POINTS, FIVE_POINTS, NINE_POINTS, or THIRTEEN_POINTS. Format: string
 NINE_POINTS
@@ -56,7 +56,7 @@ True
 False
 ---------#
 # bore_mask = Hide upper left and upper right image slots while scanning. Format: bool
-False
+True
 ---------#
 # constrained_set = Preselected set of images to use as targets. If left blank, entire stimuli set is available for use as targets. Values should be comma separated list, i.e., 1,2,3 Format: list
 0,8,10,26,36,41,91,112,135,146,149,153,159,172,198
@@ -87,6 +87,9 @@ True
 ---------#
 # disp_units = Units used to display stimuli. Options: pix; deg not yet supported. Format: string
 pix
+---------#
+# testing = Enter performance testing mode. Allows you to determine if frames are being dropped. Format: bool
+False
 ---------#
 # testing = Enter performance testing mode. Allows you to determine if frames are being dropped. Format: bool
 False

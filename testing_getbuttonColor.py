@@ -3,8 +3,8 @@ from pypixxlib._libdpx import DPxOpen, DPxClose, DPxWriteRegCache, DPxUpdateRegC
 from utilities import getbuttonColor
 
 selection1 = {
-    "right box": ["green", "blue", "yellow"],
-    "left box": ["white", "blue", "red"]
+    "right box": ["green", "blue", "yellow", "red", "white"],
+    "left box": ["green", "blue", "yellow", "red", "white"]
 }
 
 
@@ -12,18 +12,22 @@ selection2 = {
 "left box": ["green", "blue", "yellow", "red", "white"]
 }
 
+selection3 = {
+"right box": ["red"]
+}
+
+
+DPxOpen()
+
 while True:
 
 
-
-
-    DPxOpen()
-
-    candidates = getbuttonColor(selection2)
+    candidates = getbuttonColor(selection1)
 
 
     time.sleep(0.5)  # 500 milliseconds
 
-    DPxClose()
+
     print("candidates", candidates)
 
+DPxClose()
